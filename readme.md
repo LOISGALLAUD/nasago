@@ -1,6 +1,6 @@
 # NasaGO
 
-![Cool header](image-2.png)
+![Cool header](readme/image-2.png)
 
 # Objective
 
@@ -22,6 +22,6 @@ go run main.go
 
 # Output
 
-![A few images scraped with one execution](image.png)
+![A few images scraped with one execution](readme/image.png)
 
-![Cool galaxy](image-1.png)
+![Cool galaxy](readme/image-3.png)
