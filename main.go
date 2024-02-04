@@ -92,6 +92,12 @@ func downloadFile(filename, url, userAgent string) error {
 //----------------------------------------------------------------------------------//
 
 func main() {
+	// Create a folder to store the images
+	err := os.Mkdir("images", 0755)
+	if err != nil {
+		log.Println("Error while creating the images folder:", err)
+	}
+
 	log.Println("Starting the scraping process...")
 	var imgUrls []string
 	
