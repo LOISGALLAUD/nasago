@@ -22,9 +22,9 @@ const (
 )
 
 type NasaImage struct {
-	url string
 	title string
 	description string
+	url string
 }
 
 var userAgents = []string{
@@ -175,7 +175,7 @@ func main() {
 				nasaImage.description = e.ChildText("p")
 			})
 			c.Visit(nasaImage.url)
-			err = csvWriter.Write([]string{nasaImage.url, nasaImage.title, nasaImage.description})
+			err = csvWriter.Write([]string{nasaImage.title, nasaImage.description, nasaImage.url})
 		}(imgUrl)
 	}
 	wg.Wait()
