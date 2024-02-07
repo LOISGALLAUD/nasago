@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -17,7 +18,8 @@ import (
 
 const (
 	DOMAIN = "www.nasa.gov"
-	GALLERY_URL = "https://www.nasa.gov/image-of-the-day"
+	MAX_PAGE = 5
+	GALLERY_URL = "https://www.nasa.gov/image-of-the-day/page/"
 	FILE = "img-of-the-day.csv"
 )
 
@@ -40,6 +42,27 @@ var userAgents = []string{
 func randomUserAgent(list []string) string {
 	randomIndex := rand.Intn(len(list))
 	return list[randomIndex]
+}
+
+func scrapeGallery(page int, imgUrls []string) ([]string) {
+	c := colly.NewCollector(
+		colly.AllowedDomains(DOMAIN),
+		colly.MaxDepth(1),
+	)
+	c.OnRequest(func(r *colly.Request) {
+		r.Headers.Set("User-Agent", randomUserAgent(userAgents))
+	})
+	c.OnError(func(_ *colly.Response, err error) {
+		log.Println("Error while scraping the gallery:", err)
+	})
+	c.OnHTML(".hds-gallery-item-single", func(e *colly.HTMLElement) {
+		// Extract url from the element
+		url := e.ChildAttr("a", "href")
+		imgUrls = append(imgUrls, url)
+	})
+	c.Visit(fmt.Sprintf("%s%d", GALLERY_URL, page))
+	fmt.Printf("Scraping the page at link: %s%d\n", GALLERY_URL, page)
+	return imgUrls
 }
 
 func downloadFile(filename, url, userAgent string) error {
@@ -100,24 +123,19 @@ func main() {
 
 	log.Println("Starting the scraping process...")
 	var imgUrls []string
+	page := 1
+	var wg_gallery sync.WaitGroup
+	wg_gallery.Add(MAX_PAGE)
 	
 	// Scrap the links to the images in the gallery
-	c := colly.NewCollector(
-		colly.AllowedDomains(DOMAIN),
-		colly.MaxDepth(1),
-	)
-	c.OnRequest(func(r *colly.Request) {
-		r.Headers.Set("User-Agent", randomUserAgent(userAgents))
-	})
-	c.OnError(func(_ *colly.Response, err error) {
-		log.Println("Error while scraping the gallery:", err)
-	})
-	c.OnHTML(".hds-gallery-item-single", func(e *colly.HTMLElement) {
-		// Extract url from the element
-		url := e.ChildAttr("a", "href")
-		imgUrls = append(imgUrls, url)
-	})
-	c.Visit(GALLERY_URL) // Start the scraping
+	for page <= MAX_PAGE {
+		go func(page int) {
+            defer wg_gallery.Done()
+            imgUrls = scrapeGallery(page, imgUrls)
+        }(page)
+        page++
+		}
+	wg_gallery.Wait()
 	log.Println("Scraping the gallery completed successfully.")
 	
 	//----------------------------------------------------//
@@ -136,14 +154,15 @@ func main() {
 	if err != nil {
 		log.Fatal("Cannot write to file", err)
 	}
-	var wg sync.WaitGroup
+	var wg_img sync.WaitGroup
 	counter := 0
-	wg.Add(len(imgUrls))
+	wg_img.Add(len(imgUrls))
+	fmt.Printf("Longueur de imgUrls%d", len(imgUrls))
 	for _, imgUrl := range imgUrls {
 		counter++
 		go func(imgUrl string) {
 			nasaImage := NasaImage{url: imgUrl}
-			defer wg.Done()
+			defer wg_img.Done()
 			c := colly.NewCollector(
 				colly.AllowedDomains(DOMAIN),
 				colly.MaxDepth(1),
@@ -178,6 +197,6 @@ func main() {
 			err = csvWriter.Write([]string{nasaImage.title, nasaImage.description, nasaImage.url})
 		}(imgUrl)
 	}
-	wg.Wait()
+	wg_img.Wait()
 	log.Println("Scraping completed successfully.")
 }
