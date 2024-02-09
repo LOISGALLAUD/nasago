@@ -18,7 +18,8 @@ import (
 
 const (
 	DOMAIN = "www.nasa.gov"
-	MAX_PAGE = 5
+	MAX_PAGE = 1
+	IMG_PER_PAGE = 40
 	GALLERY_URL = "https://www.nasa.gov/image-of-the-day/page/"
 	FILE = "img-of-the-day.csv"
 )
@@ -44,7 +45,7 @@ func randomUserAgent(list []string) string {
 	return list[randomIndex]
 }
 
-func scrapeGallery(page int, imgUrls []string) ([]string) {
+func scrapeGallery(page int, ch chan string) {
 	c := colly.NewCollector(
 		colly.AllowedDomains(DOMAIN),
 		colly.MaxDepth(1),
@@ -58,11 +59,11 @@ func scrapeGallery(page int, imgUrls []string) ([]string) {
 	c.OnHTML(".hds-gallery-item-single", func(e *colly.HTMLElement) {
 		// Extract url from the element
 		url := e.ChildAttr("a", "href")
-		imgUrls = append(imgUrls, url)
+		// Send the url to the channel
+		ch <- url
 	})
 	c.Visit(fmt.Sprintf("%s%d", GALLERY_URL, page))
 	fmt.Printf("Scraping the page at link: %s%d\n", GALLERY_URL, page)
-	return imgUrls
 }
 
 func downloadFile(filename, url, userAgent string) error {
@@ -122,8 +123,8 @@ func main() {
 	}
 
 	log.Println("Starting the scraping process...")
-	var imgUrls []string
 	page := 1
+	ch := make(chan string, IMG_PER_PAGE*MAX_PAGE)
 	var wg_gallery sync.WaitGroup
 	wg_gallery.Add(MAX_PAGE)
 	
@@ -131,11 +132,12 @@ func main() {
 	for page <= MAX_PAGE {
 		go func(page int) {
             defer wg_gallery.Done()
-            imgUrls = scrapeGallery(page, imgUrls)
+            scrapeGallery(page, ch)
         }(page)
         page++
 		}
 	wg_gallery.Wait()
+	close(ch)
 	log.Println("Scraping the gallery completed successfully.")
 	
 	//----------------------------------------------------//
@@ -156,9 +158,9 @@ func main() {
 	}
 	var wg_img sync.WaitGroup
 	counter := 0
-	wg_img.Add(len(imgUrls))
-	fmt.Printf("Longueur de imgUrls%d", len(imgUrls))
-	for _, imgUrl := range imgUrls {
+	wg_img.Add(len(ch))
+	fmt.Printf("Longueur de imgUrls%d", len(ch))
+	for imgUrl := range ch {
 		counter++
 		go func(imgUrl string) {
 			nasaImage := NasaImage{url: imgUrl}
@@ -174,17 +176,17 @@ func main() {
 				log.Println("Error while scraping an image:", err)
 			})
 			// Image extraction
-			// ADD DOWNLOADING IMAGE HERE
 			c.OnHTML(".hds-attachment-single__image", func(e *colly.HTMLElement) {
 				imageUrl := e.ChildAttr("img", "src")
 				// Ensure that the image URL is not empty
 				if imageUrl != "" {
+					imgName := filepath.Base(imageUrl)
 					// Download the image using the random user agent
-					err := downloadFile(filepath.Base(imageUrl), imageUrl, randomUserAgent(userAgents))
+					err := downloadFile(imgName, imageUrl, randomUserAgent(userAgents))
 					if err != nil {
 						log.Println("Error while downloading image:", err)
 					} else {
-						log.Println("Image downloaded successfully:", imageUrl)
+						log.Println("Image downloaded successfully:", imgName)
 					}
 				}
 			})
