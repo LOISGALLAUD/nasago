@@ -159,7 +159,6 @@ func main() {
 	var wg_img sync.WaitGroup
 	counter := 0
 	wg_img.Add(len(ch))
-	fmt.Printf("Longueur de imgUrls%d", len(ch))
 	for imgUrl := range ch {
 		counter++
 		go func(imgUrl string) {
